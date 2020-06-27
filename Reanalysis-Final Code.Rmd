@@ -1,0 +1,121 @@
+---
+title: "Reanalysis- Flexible Force"
+output: 
+  html_document:
+    code_folding: hide
+    authors: Claudia Ramos, Noah Auger
+---
+
+```{r setup,include=TRUE}
+knitr::opts_chunk$set(warning = FALSE,message = FALSE)
+```
+
+## Steps
+
+The first step to analyzing any data in R is to upload it into your working environment.
+These results are a sneak peek into each data set detailing the first few cell lines.
+```{r environment}
+ summarizedPharmacoData <- readRDS("C:/Users/claudia/Desktop/Replicathon/data/summarizedPharmacoData.rds")
+ modelSummarizedPharmacoData <- readRDS("C:/Users/claudia/Desktop/Replicathon/data/modelSummarizedPharmacoData.rds")
+ rawPharmacoData <- readRDS("C:/Users/claudia/Desktop/Replicathon/data/rawPharmacoData.rds")
+head(unique(rawPharmacoData$cellLine))
+head(unique(modelSummarizedPharmacoData$cellLine))
+head(unique(summarizedPharmacoData$cellLine))
+```
+
+## Does the number of dosages affect the results?
+
+The number of dosages limits the amount of data and the ranges in each study are highly different, hindering the correlations resulting in "unaccurate" results.
+#The code is telling us which concentrations were used in each study and plotting it visibly in a histogram
+
+```{r concentrations}
+tapply(rawPharmacoData$concentration, rawPharmacoData$study, function(x) {length(unique(x)) })
+DrugConcentrations <- tapply(rawPharmacoData$concentration, rawPharmacoData$study, function(x) {unique(x) })
+DrugConcentrations
+DrugConcentrations$CCLE
+range(DrugConcentrations$CCLE)
+range(DrugConcentrations$GDSC)
+hist(DrugConcentrations$GDSC)
+ hist(DrugConcentrations$CCLE)
+```
+# x shows the percentage of viablity from 0-175, the y is showing the density of cells that correspond to the viability percentage
+
+```{r,include=TRUE}
+library(tidyverse)
+rawPharmacoData %>%
+    summarize(min_viability = min(viability),
+              max_viability = max(viability),
+              n_too_small   = sum(viability < 0),
+              n_too_big     = sum(viability > 100))
+
+rawPharmacoData %>%
+    ggplot(aes(x = viability, group = study, fill = study, color = study)) +
+    geom_density(alpha = 1/4) +
+    xlim(0, 170) +
+    ggtitle("Distributions of viability scores by study")
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+##The sum of viabilty percentage points between 0-100. Its showing total amount of cell lines, meaning the drug-resistant cells
+
+
+## Range and values between 0-100
+```{r,include=TRUE}
+range(rawPharmacoData$viability)
+sum(rawPharmacoData$viability < 0)
+sum(rawPharmacoData$viability > 100)
+```
+
+
+
+```{r, include=TRUE}
+summarizedPharmacoData %>%
+    ggplot(aes(x = (auc_GDSC), y = (auc_CCLE))) +
+     geom_point(alpha = 1/2, cex = 1/2) + 
+     facet_wrap(~ drug) +
+     xlab("(GDSC AUC)") +
+     ylab("(CCLE AUC)") +
+     ggtitle("AUC summaries of cell line response across studies")
+```
+
+# Correlation coefficient comparison
+###7 Nilotinib        0.772      0.147  
+
+```{r, include=TRUE}
+## with the tidyverse
+drugCorrsIC50 <- summarizedPharmacoData %>% 
+    group_by(drug) %>%
+    summarize(Pearson_ic50  = cor(-log10(ic50_GDSC / 10^6), -log10(ic50_CCLE / 10^6), method = "pearson"),
+              Spearman_ic50 = cor(-log10(ic50_GDSC / 10^6), -log10(ic50_CCLE / 10^6), method = "spearman"))
+
+
+drugCorrsAUC <- summarizedPharmacoData %>% 
+    group_by(drug) %>%
+    summarize(Pearson_auc  = cor((auc_GDSC / 10^6),(auc_CCLE / 10^6), method = "pearson"),
+              Spearman_auc = cor((auc_GDSC / 10^6),(auc_CCLE / 10^6), method = "spearman"))
+
+drugCorrsAUC
+
+drugCorrsIC50 <- gather(drugCorrsIC50, measure, correlation, -drug)
+drugCorrsAUC <- gather(drugCorrsAUC, measure, correlation, -drug)
+
+
+drugCorrsIC50 %>%
+    ggplot(aes(x = drug, y = correlation, fill = measure, group = measure)) +
+    geom_bar(stat = "identity", position = position_dodge(), colour = "black") + 
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    scale_fill_grey() +
+    ylim(0, 1) + 
+    ggtitle("Correlation of cell line IC50 summaries between studies for each drug")
+
+drugCorrsAUC %>%
+     ggplot(aes(x = drug, y = correlation, fill = measure, group = measure)) +
+     geom_bar(stat = "identity", position = position_dodge(), colour = "black") + 
+     theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+     scale_fill_grey() +
+     ylim(0, 1) + 
+     ggtitle("Correlation of cell line AUC summaries between studies for each drug")
+```
+
